@@ -39,61 +39,80 @@ export const createBooking = async (req: AuthRequest, res: Response, next: NextF
     const { listingId, checkIn, checkOut } = result.data;
     const guestId = req.userId as number;
 
-    const listing = await prisma.listing.findUnique({ where: { id: listingId } });
-    if (!listing) return res.status(404).json({ error: "Listing not found" });
-
     const inDate = new Date(checkIn);
     const outDate = new Date(checkOut);
 
-    const conflict = await prisma.booking.findFirst({
-      where: {
-        listingId,
-        status: "CONFIRMED",
-        checkIn: { lt: outDate },
-        checkOut: { gt: inDate }
+    // 💅 PART 5: THE TRANSACTION GLOW-UP
+    // We wrap the check and the create in a transaction to prevent race conditions.
+    const newBooking = await prisma.$transaction(async (tx) => {
+      // 1. Check if listing exists (using the transaction client 'tx')
+      const listing = await tx.listing.findUnique({ where: { id: listingId } });
+      if (!listing) throw new Error("NOT_FOUND");
+
+      // 2. Check for overlapping CONFIRMED bookings
+      const conflict = await tx.booking.findFirst({
+        where: {
+          listingId,
+          status: "CONFIRMED",
+          checkIn: { lt: outDate },
+          checkOut: { gt: inDate }
+        }
+      });
+
+      if (conflict) {
+        // This stops the transaction and jumps to our catch block
+        throw new Error("BOOKING_CONFLICT");
       }
+
+      // 3. Calculate the damage (totalPrice)
+      const days = Math.ceil((outDate.getTime() - inDate.getTime()) / (1000 * 60 * 60 * 24));
+      const totalPrice = days * listing.pricePerNight;
+
+      // 4. Create the booking as PENDING
+      return tx.booking.create({
+        data: {
+          listingId,
+          guestId,
+          checkIn: inDate,
+          checkOut: outDate,
+          totalPrice,
+          status: "PENDING"
+        },
+        include: { listing: true, guest: true } // Include data needed for email
+      });
     });
 
-    if (conflict) {
-      return res.status(409).json({ error: "These dates are already booked." });
-    }
+    // If we reached here, the transaction was a success! 
+    res.status(201).json(newBooking);
 
-    const days = Math.ceil((outDate.getTime() - inDate.getTime()) / (1000 * 60 * 60 * 24));
-    const totalPrice = days * listing.pricePerNight;
-
-    const booking = await prisma.booking.create({
-      data: {
-        listingId,
-        guestId,
-        checkIn: inDate,
-        checkOut: outDate,
-        totalPrice,
-        status: "PENDING"
-      }
-    });
-
-    // Send booking confirmation email
-    res.status(201).json(booking);
+    // 📧 Best-effort email (doesn't need to block the response)
     try {
-      const guest = await prisma.user.findUnique({ where: { id: guestId } });
-      if (guest) {
-        await sendEmail(
-          guest.email,
-          "Your Booking is Confirmed!",
-          bookingConfirmationEmail(
-            guest.name,
-            listing.title,
-            listing.location,
-            inDate.toDateString(),
-            outDate.toDateString(),
-            totalPrice
-          )
-        );
-      }
+      await sendEmail(
+        newBooking.guest.email,
+        "Your Booking is Confirmed!",
+        bookingConfirmationEmail(
+          newBooking.guest.name,
+          newBooking.listing.title,
+          newBooking.listing.location,
+          inDate.toDateString(),
+          outDate.toDateString(),
+          newBooking.totalPrice
+        )
+      );
     } catch (emailError) {
-      console.error("[EMAIL ERROR] Booking confirmation email failed:", emailError);
+      console.error("[EMAIL ERROR] Confirmation email failed:", emailError);
     }
-  } catch (error) { next(error); }
+
+  } catch (error: any) {
+    // 💅 Catching our custom transaction errors
+    if (error.message === "BOOKING_CONFLICT") {
+      return res.status(409).json({ error: "These dates are already snatched! Try a different time, bestie." });
+    }
+    if (error.message === "NOT_FOUND") {
+      return res.status(404).json({ error: "That listing doesn't exist." });
+    }
+    next(error);
+  }
 };
 
 export const deleteBooking = async (req: AuthRequest, res: Response, next: NextFunction) => {
@@ -122,8 +141,8 @@ export const deleteBooking = async (req: AuthRequest, res: Response, next: NextF
       data: { status: "CANCELLED" }
     });
 
-    // Send cancellation email
     res.json(updatedBooking);
+
     try {
       await sendEmail(
         booking.guest.email,

@@ -1,7 +1,30 @@
 import { Request, Response, NextFunction } from 'express';
 import prisma from '../config/prisma';
 import { createListingSchema, updateListingSchema } from '../validators/listings.validator';
-import { AuthRequest } from '../middlewares/auth.middleware'; // Import our custom request type!
+import { AuthRequest } from '../middlewares/auth.middleware'; 
+import { getOptimizedUrl } from '../config/cloudinary';
+
+/**
+ * 💅 PART 6: RAW QUERY STATS
+ * This uses $queryRaw to get grouped statistics directly from the database.
+ * We use template literals because Prisma automatically parameterizes them to prevent SQL Injection.
+ */
+export const getListingStats = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const stats = await prisma.$queryRaw`
+      SELECT 
+        location, 
+        COUNT(*)::int AS total, 
+        ROUND(AVG("pricePerNight")::numeric, 2) AS avg_price,
+        MIN("pricePerNight") AS min_price,
+        MAX("pricePerNight") AS max_price
+      FROM "Listing"
+      GROUP BY location
+      ORDER BY total DESC
+    `;
+    res.json(stats);
+  } catch (error) { next(error); }
+};
 
 export const getAllListings = async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -14,10 +37,21 @@ export const getAllListings = async (req: Request, res: Response, next: NextFunc
       take: limit,
       include: {
         host: { select: { name: true, avatar: true } },
-        _count: { select: { bookings: true } }
+        _count: { select: { bookings: true } },
+        photos: true 
       }
     });
-    res.json(listings);
+
+    // 💅 Optimize all photos for the feed!
+    const formattedListings = listings.map(listing => ({
+      ...listing,
+      photos: listing.photos.map(photo => ({
+        ...photo,
+        url: getOptimizedUrl(photo.url, 500, 500)
+      }))
+    }));
+
+    res.json(formattedListings);
   } catch (error) { next(error); }
 };
 
@@ -31,11 +65,29 @@ export const getListingById = async (req: Request, res: Response, next: NextFunc
           include: {
             guest: { select: { name: true, avatar: true } }
           }
-        }
+        },
+        photos: true 
       }
     });
+    
     if (!listing) return res.status(404).json({ error: 'Listing not found' });
-    res.json(listing);
+
+    // 🛑 SECURITY PATCH! Scrub the host's password
+    if (listing.host) {
+      const { password, resetToken, resetTokenExpiry, ...safeHost } = listing.host as any;
+      listing.host = safeHost;
+    }
+
+    // 💅 Optimize the URLs before sending them to the user
+    const formattedListing = {
+      ...listing,
+      photos: listing.photos.map(photo => ({
+        ...photo,
+        url: getOptimizedUrl(photo.url, 500, 500)
+      }))
+    };
+
+    res.json(formattedListing);
   } catch (error) { next(error); }
 };
 
@@ -44,7 +96,6 @@ export const createListing = async (req: AuthRequest, res: Response, next: NextF
     const result = createListingSchema.safeParse(req.body);
     if (!result.success) return res.status(400).json({ errors: result.error.issues });
 
-    // Force the hostId to be the logged-in user's ID. No faking allowed!
     const listing = await prisma.listing.create({ 
       data: { 
         ...result.data, 
@@ -59,11 +110,9 @@ export const updateListing = async (req: AuthRequest, res: Response, next: NextF
   try {
     const listingId = parseInt(req.params.id as string);
 
-    // 1. Fetch the listing to check who owns it
     const listing = await prisma.listing.findUnique({ where: { id: listingId } });
     if (!listing) return res.status(404).json({ error: 'Listing not found' });
 
-    // 2. Ownership Check: Are you the owner? Or are you an ADMIN?
     if (listing.hostId !== req.userId && req.role !== "ADMIN") {
       return res.status(403).json({ error: "You can only edit your own listings" });
     }
@@ -83,11 +132,9 @@ export const deleteListing = async (req: AuthRequest, res: Response, next: NextF
   try {
     const listingId = parseInt(req.params.id as string);
 
-    // 1. Fetch the listing
     const listing = await prisma.listing.findUnique({ where: { id: listingId } });
     if (!listing) return res.status(404).json({ error: 'Listing not found' });
 
-    // 2. Ownership Check
     if (listing.hostId !== req.userId && req.role !== "ADMIN") {
       return res.status(403).json({ error: "You can only delete your own listings" });
     }

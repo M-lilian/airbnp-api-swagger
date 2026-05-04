@@ -77,3 +77,15 @@ export const deleteFromCloudinary = async (publicId: string): Promise<void> => {
     console.error("❌ CLOUDINARY DELETE ERROR:", error);
   }
 };
+
+// 4. Research Task: URL Optimization 💅
+export const getOptimizedUrl = (url: string, width: number, height: number): string => {
+  // Defensive programming: If the database accidentally saved a blank URL, don't crash.
+  if (!url) return url; 
+
+  // The Cloudinary magic string: width, height, crop to fill, auto-format (WebP), auto-quality
+  const transformString = `upload/w_${width},h_${height},c_fill,f_auto,q_auto/`;
+  
+  // Inject the magic string right after 'upload/'
+  return url.replace('upload/', transformString);
+};

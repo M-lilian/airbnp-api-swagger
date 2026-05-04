@@ -2,6 +2,7 @@ import 'dotenv/config';
 import express, { Request, Response, NextFunction } from 'express';
 import { connectDB } from './config/prisma';
 import { PrismaClient, Prisma } from '@prisma/client'; 
+import { setupSwagger } from './config/swagger'; // 💅 You had the import right here!
 
 import userRoutes from './routes/users.routes';
 import listingRoutes from './routes/listings.routes';
@@ -11,6 +12,10 @@ import uploadRoutes from './routes/upload.routes';
 
 const app = express();
 app.use(express.json());
+
+// 💅 FIRE UP THE SWAGGER DOCS
+// This needs to happen right after middleware, but BEFORE your routes!
+setupSwagger(app);
 
 app.use('/auth', authRoutes);
 app.use('/', uploadRoutes);

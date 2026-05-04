@@ -2,6 +2,7 @@ generator client {
   provider = "prisma-client-js"
 }
 
+// 💅 Part 2 Fix: url is removed because it's handled in prisma.config.ts
 datasource db {
   provider = "postgresql"
 }
@@ -34,10 +35,10 @@ model User {
   password         String    // Secured by bcrypt
   role             Role      @default(GUEST)
   resetToken       String?   // For password recovery
-  resetTokenExpiry DateTime? 
+  resetTokenExpiry DateTime?
   createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt 
-  
+  updatedAt        DateTime  @updatedAt
+
   profile          Profile?
   listings         Listing[]
   bookings         Booking[]
@@ -50,7 +51,7 @@ model Profile {
   bio     String?
   website String?
   country String?
-  
+
   user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
   userId  Int     @unique
 }
@@ -67,15 +68,19 @@ model Listing {
   rating        Float?
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
-  
+
   hostId        Int
   host          User           @relation(fields: [hostId], references: [id], onDelete: Cascade)
-  
+
   bookings      Booking[]
   photos        ListingPhoto[]
 
+  // 💅 Part 3: Listing Indexes
   @@index([location])
   @@index([pricePerNight])
+  @@index([type])
+  @@index([hostId])
+  @@index([type, location]) // Composite index for advanced filtering!
 }
 
 model Booking {
@@ -85,18 +90,23 @@ model Booking {
   totalPrice Float
   status     BookingStatus @default(PENDING)
   createdAt  DateTime      @default(now())
-  
+
   guestId    Int
   guest      User          @relation(fields: [guestId], references: [id], onDelete: Cascade)
-  
+
   listingId  Int
   listing    Listing       @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  // 💅 Part 3: Booking Indexes
+  @@index([guestId])
+  @@index([listingId])
+  @@index([listingId, checkIn, checkOut]) // For that atomic conflict check
 }
 
 model ListingPhoto {
-  id        Int      @id @default(autoincrement())
+  id        Int     @id @default(autoincrement())
   url       String
   publicId  String
   listingId Int
-  listing   Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  listing   Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
 }
