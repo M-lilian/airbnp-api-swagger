@@ -1,8 +1,10 @@
 import "dotenv/config";
 import { PrismaClient } from "@prisma/client";
+import { PrismaPg } from "@prisma/adapter-pg";
 import bcrypt from "bcrypt";
 
-const prisma = new PrismaClient();
+const adapter = new PrismaPg({ connectionString: process.env["DATABASE_URL"] as string });
+const prisma = new PrismaClient({ adapter } as any);
 
 async function main() {
   console.log("🌱 Seeding database...");
@@ -170,7 +172,7 @@ async function main() {
     data: {
       checkIn: new Date("2026-06-01"),
       checkOut: new Date("2026-06-05"),
-      totalPrice: 4 * penthouse.pricePerNight, // 4 nights × 500 = 2000
+      totalPrice: 4 * penthouse.pricePerNight,
       status: "CONFIRMED",
       guestId: sunghoon.id,
       listingId: penthouse.id,
@@ -181,7 +183,7 @@ async function main() {
     data: {
       checkIn: new Date("2026-07-10"),
       checkOut: new Date("2026-07-15"),
-      totalPrice: 5 * beachHouse.pricePerNight, // 5 nights × 350 = 1750
+      totalPrice: 5 * beachHouse.pricePerNight,
       status: "PENDING",
       guestId: sunoo.id,
       listingId: beachHouse.id,
@@ -192,7 +194,7 @@ async function main() {
     data: {
       checkIn: new Date("2026-08-20"),
       checkOut: new Date("2026-08-25"),
-      totalPrice: 5 * oceanVilla.pricePerNight, // 5 nights × 450 = 2250
+      totalPrice: 5 * oceanVilla.pricePerNight,
       status: "CONFIRMED",
       guestId: jungwon.id,
       listingId: oceanVilla.id,
