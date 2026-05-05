@@ -1,5 +1,5 @@
 -- CreateEnum
-CREATE TYPE "Role" AS ENUM ('HOST', 'GUEST');
+CREATE TYPE "Role" AS ENUM ('ADMIN', 'HOST', 'GUEST');
 
 -- CreateEnum
 CREATE TYPE "ListingType" AS ENUM ('APARTMENT', 'HOUSE', 'VILLA', 'CABIN');
@@ -14,12 +14,27 @@ CREATE TABLE "User" (
     "email" TEXT NOT NULL,
     "username" TEXT NOT NULL,
     "phone" TEXT NOT NULL,
+    "password" TEXT NOT NULL,
     "role" "Role" NOT NULL DEFAULT 'GUEST',
-    "avatar" TEXT,
-    "bio" TEXT,
+    "resetToken" TEXT,
+    "resetTokenExpiry" TIMESTAMP(3),
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+    "avatar" TEXT,
+    "avatarPublicId" TEXT,
 
     CONSTRAINT "User_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "Profile" (
+    "id" SERIAL NOT NULL,
+    "bio" TEXT,
+    "website" TEXT,
+    "country" TEXT,
+    "userId" INTEGER NOT NULL,
+
+    CONSTRAINT "Profile_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -54,6 +69,16 @@ CREATE TABLE "Booking" (
     CONSTRAINT "Booking_pkey" PRIMARY KEY ("id")
 );
 
+-- CreateTable
+CREATE TABLE "ListingPhoto" (
+    "id" SERIAL NOT NULL,
+    "url" TEXT NOT NULL,
+    "publicId" TEXT NOT NULL,
+    "listingId" INTEGER NOT NULL,
+
+    CONSTRAINT "ListingPhoto_pkey" PRIMARY KEY ("id")
+);
+
 -- CreateIndex
 CREATE UNIQUE INDEX "User_email_key" ON "User"("email");
 
@@ -61,10 +86,34 @@ CREATE UNIQUE INDEX "User_email_key" ON "User"("email");
 CREATE UNIQUE INDEX "User_username_key" ON "User"("username");
 
 -- CreateIndex
+CREATE UNIQUE INDEX "Profile_userId_key" ON "Profile"("userId");
+
+-- CreateIndex
 CREATE INDEX "Listing_location_idx" ON "Listing"("location");
 
 -- CreateIndex
 CREATE INDEX "Listing_pricePerNight_idx" ON "Listing"("pricePerNight");
+
+-- CreateIndex
+CREATE INDEX "Listing_type_idx" ON "Listing"("type");
+
+-- CreateIndex
+CREATE INDEX "Listing_hostId_idx" ON "Listing"("hostId");
+
+-- CreateIndex
+CREATE INDEX "Listing_type_location_idx" ON "Listing"("type", "location");
+
+-- CreateIndex
+CREATE INDEX "Booking_guestId_idx" ON "Booking"("guestId");
+
+-- CreateIndex
+CREATE INDEX "Booking_listingId_idx" ON "Booking"("listingId");
+
+-- CreateIndex
+CREATE INDEX "Booking_listingId_checkIn_checkOut_idx" ON "Booking"("listingId", "checkIn", "checkOut");
+
+-- AddForeignKey
+ALTER TABLE "Profile" ADD CONSTRAINT "Profile_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "Listing" ADD CONSTRAINT "Listing_hostId_fkey" FOREIGN KEY ("hostId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
@@ -74,3 +123,6 @@ ALTER TABLE "Booking" ADD CONSTRAINT "Booking_guestId_fkey" FOREIGN KEY ("guestI
 
 -- AddForeignKey
 ALTER TABLE "Booking" ADD CONSTRAINT "Booking_listingId_fkey" FOREIGN KEY ("listingId") REFERENCES "Listing"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "ListingPhoto" ADD CONSTRAINT "ListingPhoto_listingId_fkey" FOREIGN KEY ("listingId") REFERENCES "Listing"("id") ON DELETE CASCADE ON UPDATE CASCADE;
