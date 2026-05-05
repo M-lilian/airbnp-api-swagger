@@ -1,8 +1,41 @@
 import { Router } from 'express';
-import { getAllListings, getListingById, createListing, updateListing, deleteListing } from '../controllers/listings.controller';
+import { getAllListings, getListingById, createListing, updateListing, deleteListing, getListingStats } from '../controllers/listings.controller';
 import { authenticate, requireHost } from '../middlewares/auth.middleware';
 
 const router = Router();
+
+/**
+ * @swagger
+ * /listings/stats:
+ *   get:
+ *     summary: Get listing statistics grouped by location
+ *     tags: [Listings]
+ *     responses:
+ *       200:
+ *         description: Listing statistics per location
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   location:
+ *                     type: string
+ *                     example: Seoul, South Korea
+ *                   total:
+ *                     type: integer
+ *                     example: 3
+ *                   avg_price:
+ *                     type: number
+ *                     example: 450.00
+ *                   min_price:
+ *                     type: number
+ *                     example: 200
+ *                   max_price:
+ *                     type: number
+ *                     example: 500
+ */
 
 /**
  * @swagger
@@ -209,6 +242,9 @@ const router = Router();
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
+
+// IMPORTANT: /stats must be before /:id — otherwise Express matches "stats" as an id
+router.get('/stats', getListingStats);
 
 // Public routes
 router.get('/', getAllListings);
